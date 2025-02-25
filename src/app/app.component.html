@@ -4,6 +4,10 @@
     [columnDefs]="usersColumnDefs"
     [rowData]="usersData"
     height="400px"
+    [showActions]="true"
+    [showExcelExport]="true"
+    [showPdfExport]="true"
+    [showPrint]="true"
   ></app-data-grid>
 
   <app-data-grid
@@ -11,5 +15,9 @@
     [columnDefs]="ordersColumnDefs"
     [rowData]="ordersData"
     height="400px"
+    [showActions]="true"
+    [showExcelExport]="true"
+    [showPdfExport]="false"
+    [showPrint]="true"
   ></app-data-grid>
 </div>
