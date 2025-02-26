@@ -15,10 +15,16 @@ export class AppComponent {
   public modules: Module[] = [ClientSideRowModelModule];
 
   usersColumnDefs: ColDef[] = [
-    { field: 'name', headerName: 'Name', sortable: true, filter: true },
-    { field: 'age', headerName: 'Age', sortable: true, filter: true },
-    { field: 'city', headerName: 'City', sortable: true, filter: true },
-    { field: 'country', headerName: 'Country', sortable: true, filter: true }
+    { field: 'name', headerName: 'Name' },
+    { field: 'email', headerName: 'Email' },
+    { field: 'role', headerName: 'Role' },
+    { field: 'status', headerName: 'Status' },
+    { field: 'age', headerName: 'Age' },
+    { 
+      field: 'salary', 
+      headerName: 'Salary', 
+      valueFormatter: params => params.value ? `$${params.value.toLocaleString()}` : ''
+    }
   ];
 
   usersData = [
@@ -29,11 +35,27 @@ export class AppComponent {
     { name: 'Charlie Wilson', age: 32, city: 'Sydney', country: 'Australia' }
   ];
 
+  productsColumnDefs: ColDef[] = [
+    { field: 'name', headerName: 'Name' },
+    { field: 'category', headerName: 'Category' },
+    { 
+      field: 'price', 
+      headerName: 'Price', 
+      valueFormatter: params => params.value ? `$${params.value.toLocaleString()}` : ''
+    },
+    { field: 'stock', headerName: 'Stock' },
+    { 
+      field: 'rating', 
+      headerName: 'Rating', 
+      valueFormatter: params => params.value ? `${params.value} ★` : ''
+    }
+  ];
+
   ordersColumnDefs: ColDef[] = [
-    { field: 'orderNumber', headerName: 'Order #', sortable: true, filter: true },
-    { field: 'customer', headerName: 'Customer', sortable: true, filter: true },
-    { field: 'amount', headerName: 'Amount ($)', sortable: true, filter: true },
-    { field: 'status', headerName: 'Status', sortable: true, filter: true }
+    { field: 'orderNumber', headerName: 'Order #' },
+    { field: 'customer', headerName: 'Customer' },
+    { field: 'amount', headerName: 'Amount ($)' },
+    { field: 'status', headerName: 'Status' }
   ];
 
   ordersData = [
