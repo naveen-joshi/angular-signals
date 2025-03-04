@@ -45,8 +45,8 @@ ModuleRegistry.registerModules([
       [theme]="theme" 
       [getRowId]="cmpObj.getRowId" 
       [defaultColDef]="defaultColDef"
-      [rowSelection]="'single'"
-      [suppressRowClickSelection]="false"
+      [rowSelection]="'multiple'"
+      [suppressRowClickSelection]="true"
       [getRowClass]="getRowClass"
       (gridReady)="onGridReady($event)"
       (rowClicked)="onRowClicked($event)"
@@ -77,7 +77,7 @@ export class DataGridWrapperComponent<TData> {
   );
   readonly theme = themeQuartz;
   readonly #gridApi: WritableSignal<GridApi> = signal(undefined);
-  readonly #selectedRowId: WritableSignal<string | null> = signal(null);
+  readonly #selectedRowIds = signal<Set<string>>(new Set());
   readonly defaultColDef: ColDef = { 
     suppressMovable: true,
     sortable: true,
@@ -91,10 +91,23 @@ export class DataGridWrapperComponent<TData> {
         columnDefinitions !== undefined && api !== undefined
     ),
     map(([api, columnDefinitions]) => {
+      const checkboxCol: ColDef = {
+        headerName: '',
+        field: 'checkboxSelection',
+        width: 50,
+        pinned: 'left',
+        checkboxSelection: true,
+        headerCheckboxSelection: true,
+        headerCheckboxSelectionFilteredOnly: true,
+        cellClass: 'checkbox-cell'
+      };
+      
       return {
         api: api,
-        colDef:
-          this.datagridUtility.transformColumnDefinitions(columnDefinitions),
+        colDef: [
+          checkboxCol,
+          ...this.datagridUtility.transformColumnDefinitions(columnDefinitions)
+        ],
       };
     }),
     map(({ api, colDef }) => api.setGridOption('columnDefs', colDef))
@@ -114,12 +127,16 @@ export class DataGridWrapperComponent<TData> {
     // Selected row styling
     if (params.node.isSelected()) {
       classes.push('selected-row');
-      this.#selectedRowId.set(rowId);
+      this.#selectedRowIds.update(ids => {
+        const newIds = new Set(ids);
+        newIds.add(rowId);
+        return newIds;
+      });
     }
     
-    // Disabled row styling
-    const selectedId = this.#selectedRowId();
-    if (selectedId && selectedId !== rowId && !params.node.isSelected()) {
+    // Disabled row styling for non-selected rows when there are selections
+    const selectedIds = this.#selectedRowIds();
+    if (selectedIds.size > 0 && !selectedIds.has(rowId) && !params.node.isSelected()) {
       classes.push('disabled-row');
     }
     
@@ -128,26 +145,44 @@ export class DataGridWrapperComponent<TData> {
 
   onRowClicked(event: RowClickedEvent<TData>) {
     const rowId = event.data[this.uniqueId()].toString();
-    if (this.#selectedRowId() && this.#selectedRowId() !== rowId) {
-      return; // Prevent clicking disabled rows
-    }
+    const selectedIds = this.#selectedRowIds();
     
-    if (!event.node.isSelected()) {
+    // Allow clicking if no rows are selected or if the row is already selected
+    if (selectedIds.size === 0 || selectedIds.has(rowId)) {
       this.rowClicked.emit(event.data);
+      event.node.setSelected(!event.node.isSelected());
     }
   }
 
   onRowSelected(event: RowSelectedEvent<TData>) {
+    const rowId = event.data[this.uniqueId()].toString();
+    
     if (event.node.isSelected()) {
       this.rowSelected.emit(event.data);
+      this.#selectedRowIds.update(ids => {
+        const newIds = new Set(ids);
+        newIds.add(rowId);
+        return newIds;
+      });
     } else {
-      this.#selectedRowId.set(null);
+      this.#selectedRowIds.update(ids => {
+        const newIds = new Set(ids);
+        newIds.delete(rowId);
+        return newIds;
+      });
     }
   }
 
   onSelectionChanged(event: SelectionChangedEvent<TData>) {
     const selectedNodes = event.api.getSelectedNodes();
     const selectedData = selectedNodes.map(node => node.data);
+    
+    // Update selected row IDs
+    const newSelectedIds = new Set(
+      selectedNodes.map(node => node.data[this.uniqueId()].toString())
+    );
+    this.#selectedRowIds.set(newSelectedIds);
+    
     this.selectionChanged.emit(selectedData);
   }
 
@@ -158,6 +193,7 @@ export class DataGridWrapperComponent<TData> {
 
   deselectAll() {
     this.#gridApi()?.deselectAll();
+    this.#selectedRowIds.set(new Set());
   }
 
   toggleSelection() {

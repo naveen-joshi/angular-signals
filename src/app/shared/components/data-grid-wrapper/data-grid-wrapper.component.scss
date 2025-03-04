@@ -2,6 +2,8 @@
   .ag-theme-quartz {
     --ag-row-hover-color: rgba(0, 0, 0, 0.1);
     --ag-selected-row-background-color: #e6f3ff;
+    --ag-checkbox-checked-color: #1976d2;
+    --ag-checkbox-unchecked-color: #757575;
     
     .even-row {
       background-color: #ffffff;
@@ -30,6 +32,18 @@
       }
     }
 
+    .checkbox-cell {
+      pointer-events: auto !important;
+      opacity: 1 !important;
+      cursor: pointer !important;
+
+      .ag-checkbox-input-wrapper {
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        cursor: pointer !important;
+      }
+    }
+
     .ag-row {
       transition: background-color 0.2s ease, opacity 0.2s ease;
       
@@ -39,6 +53,30 @@
       
       &.ag-row-selected {
         background-color: var(--ag-selected-row-background-color);
+      }
+    }
+
+    // Checkbox styling
+    .ag-checkbox-input-wrapper {
+      width: 18px;
+      height: 18px;
+      
+      &.ag-checked {
+        background-color: var(--ag-checkbox-checked-color);
+        border-color: var(--ag-checkbox-checked-color);
+      }
+      
+      &:not(.ag-checked) {
+        border-color: var(--ag-checkbox-unchecked-color);
+      }
+      
+      &:hover:not(.ag-checked) {
+        border-color: var(--ag-checkbox-checked-color);
+      }
+
+      &::after {
+        color: white;
+        font-weight: bold;
       }
     }
   }
