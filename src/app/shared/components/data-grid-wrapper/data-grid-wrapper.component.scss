@@ -1,0 +1,45 @@
+:host {
+  .ag-theme-quartz {
+    --ag-row-hover-color: rgba(0, 0, 0, 0.1);
+    --ag-selected-row-background-color: #e6f3ff;
+    
+    .even-row {
+      background-color: #ffffff;
+    }
+    
+    .odd-row {
+      background-color: #f8f8f8;
+    }
+    
+    .selected-row {
+      background-color: var(--ag-selected-row-background-color) !important;
+      font-weight: 500;
+    }
+
+    .disabled-row {
+      opacity: 0.5;
+      pointer-events: none;
+      cursor: not-allowed;
+      
+      &:hover {
+        background-color: inherit !important;
+      }
+      
+      * {
+        pointer-events: none;
+      }
+    }
+
+    .ag-row {
+      transition: background-color 0.2s ease, opacity 0.2s ease;
+      
+      &:hover:not(.selected-row):not(.disabled-row) {
+        background-color: var(--ag-row-hover-color);
+      }
+      
+      &.ag-row-selected {
+        background-color: var(--ag-selected-row-background-color);
+      }
+    }
+  }
+}
