@@ -34,6 +34,8 @@ ModuleRegistry.registerModules([
   ClientSideRowModelModule,
 ]);
 
+export type SelectionMode = 'none' | 'single' | 'multiRow';
+
 @Component({
   selector: 'app-data-grid-wrapper',
   template: `
@@ -45,8 +47,8 @@ ModuleRegistry.registerModules([
       [theme]="theme" 
       [getRowId]="cmpObj.getRowId" 
       [defaultColDef]="defaultColDef"
-      [rowSelection]="'multiple'"
-      [suppressRowClickSelection]="true"
+      [rowSelection]="selectionMode() === 'single' ? 'single' : 'multiple'"
+      [suppressRowClickSelection]="selectionMode() === 'multiRow'"
       [getRowClass]="getRowClass"
       (gridReady)="onGridReady($event)"
       (rowClicked)="onRowClicked($event)"
@@ -62,7 +64,8 @@ ModuleRegistry.registerModules([
 export class DataGridWrapperComponent<TData> {
   columnDefinitions = input.required<Array<DataGridColumnDefinitions<TData>>>();
   rowData = input.required<Array<TData>>();
-  uniqueId = input.required<string>();
+  uniqueId = input<string>();
+  selectionMode = input<SelectionMode>('multiRow', { alias: 'selection-mode' });
 
   // Output events
   rowClicked = output<TData>();
@@ -78,6 +81,7 @@ export class DataGridWrapperComponent<TData> {
   readonly theme = themeQuartz;
   readonly #gridApi: WritableSignal<GridApi> = signal(undefined);
   readonly #selectedRowIds = signal<Set<string>>(new Set());
+  readonly #clickedRowId = signal<string | null>(null);
   readonly defaultColDef: ColDef = { 
     suppressMovable: true,
     sortable: true,
@@ -85,29 +89,31 @@ export class DataGridWrapperComponent<TData> {
   };
 
   readonly transformColDefs$ = toObservable(this.#gridApi).pipe(
-    combineLatestWith(toObservable(this.columnDefinitions)),
+    combineLatestWith(toObservable(this.columnDefinitions), toObservable(this.selectionMode)),
     filter(
-      ([api, columnDefinitions]) =>
+      ([api, columnDefinitions, mode]) =>
         columnDefinitions !== undefined && api !== undefined
     ),
-    map(([api, columnDefinitions]) => {
-      const checkboxCol: ColDef = {
-        headerName: '',
-        field: 'checkboxSelection',
-        width: 50,
-        pinned: 'left',
-        checkboxSelection: true,
-        headerCheckboxSelection: true,
-        headerCheckboxSelectionFilteredOnly: true,
-        cellClass: 'checkbox-cell'
-      };
+    map(([api, columnDefinitions, mode]) => {
+      const columns: ColDef[] = this.datagridUtility.transformColumnDefinitions(columnDefinitions);
+      
+      if (mode === 'multiRow') {
+        const checkboxCol: ColDef = {
+          headerName: '',
+          field: 'checkboxSelection',
+          width: 50,
+          pinned: 'left',
+          checkboxSelection: true,
+          headerCheckboxSelection: true,
+          headerCheckboxSelectionFilteredOnly: true,
+          cellClass: 'checkbox-cell'
+        };
+        columns.unshift(checkboxCol);
+      }
       
       return {
         api: api,
-        colDef: [
-          checkboxCol,
-          ...this.datagridUtility.transformColumnDefinitions(columnDefinitions)
-        ],
+        colDef: columns,
       };
     }),
     map(({ api, colDef }) => api.setGridOption('columnDefs', colDef))
@@ -120,9 +126,12 @@ export class DataGridWrapperComponent<TData> {
   getRowClass = (params: any) => {
     const classes: string[] = [];
     const rowId = params.data[this.uniqueId()].toString();
+    const selectedIds = this.#selectedRowIds();
     
-    // Base row styling (even/odd)
-    classes.push(params.node.rowIndex % 2 === 0 ? 'even-row' : 'odd-row');
+    // Clicked row styling - only show if no selections
+    if (rowId === this.#clickedRowId() && selectedIds.size === 0) {
+      classes.push('clicked-row');
+    }
     
     // Selected row styling
     if (params.node.isSelected()) {
@@ -134,9 +143,8 @@ export class DataGridWrapperComponent<TData> {
       });
     }
     
-    // Disabled row styling for non-selected rows when there are selections
-    const selectedIds = this.#selectedRowIds();
-    if (selectedIds.size > 0 && !selectedIds.has(rowId) && !params.node.isSelected()) {
+    // Disabled row styling for all rows when there are selections
+    if (selectedIds.size > 0 && !selectedIds.has(rowId)) {
       classes.push('disabled-row');
     }
     
@@ -147,10 +155,17 @@ export class DataGridWrapperComponent<TData> {
     const rowId = event.data[this.uniqueId()].toString();
     const selectedIds = this.#selectedRowIds();
     
-    // Allow clicking if no rows are selected or if the row is already selected
-    if (selectedIds.size === 0 || selectedIds.has(rowId)) {
+    // Only allow clicking and update clicked row if no selections
+    if (selectedIds.size === 0) {
+      this.#clickedRowId.set(rowId);
       this.rowClicked.emit(event.data);
-      event.node.setSelected(!event.node.isSelected());
+      
+      // Force refresh row styles
+      this.#gridApi()?.refreshCells({
+        force: true,
+        rowNodes: [event.node],
+        columns: ['checkboxSelection']
+      });
     }
   }
 

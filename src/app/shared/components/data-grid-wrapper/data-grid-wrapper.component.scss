@@ -81,3 +81,26 @@
     }
   }
 }
+
+:host ::ng-deep {
+  .clicked-row {
+    background-color: rgba(0, 123, 255, 0.1) !important;
+    cursor: pointer;
+  }
+
+  .selected-row {
+    background-color: rgba(0, 123, 255, 0.2) !important;
+  }
+
+  .disabled-row {
+    opacity: 0.5;
+    cursor: not-allowed !important;
+    pointer-events: none;
+  }
+
+  .checkbox-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}

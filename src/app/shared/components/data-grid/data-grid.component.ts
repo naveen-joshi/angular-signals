@@ -1,25 +1,17 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { AgGridAngular } from 'ag-grid-angular';
-import { 
-  ColDef, 
-  Module,
-  GridApi, 
-  GridReadyEvent,
-  IGetRowsParams,
-  IDatasource,
-  RowModelType,
-  InfiniteRowModelModule
-} from 'ag-grid-community';
+import { ColDef, GridApi, GridReadyEvent } from 'ag-grid-community';
 import { CommonModule } from '@angular/common';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { DataService } from '../../services/data.service';
+import { DataGridWrapperComponent } from "../data-grid-wrapper/data-grid-wrapper.component";
+import { DataGridColumnDefinitions } from "../data-grid-wrapper/models/data-grid-column-definitions.model";
 
 @Component({
   selector: 'app-data-grid',
   standalone: true,
-  imports: [AgGridAngular, CommonModule],
+  imports: [CommonModule, DataGridWrapperComponent],
   template: `
     <div class="flex justify-between mb-4">
       <h2 class="text-xl font-semibold">{{ title }}</h2>
@@ -105,334 +97,297 @@ import { DataService } from '../../services/data.service';
       </div>
     </div>
     <div class="ag-theme-alpine" [style.height]="height">
-      <ag-grid-angular
-        #agGrid
-        [columnDefs]="columnDefs"
-        [modules]="modules"
-        [rowModelType]="rowModelType"
-        [datasource]="dataSource"
-        [defaultColDef]="defaultColDef"
-        [cacheBlockSize]="cacheBlockSize"
-        [maxConcurrentDatasourceRequests]="2"
-        [infiniteInitialRowCount]="infiniteInitialRowCount"
-        [maxBlocksInCache]="maxBlocksInCache"
-        [cacheOverflowSize]="cacheOverflowSize"
-        [pagination]="false"
-        [suppressPaginationPanel]="true"
-        [rowSelection]="rowSelection"
-        (gridReady)="onGridReady($event)"
-        (modelUpdated)="onModelUpdated($event)"
+      <app-data-grid-wrapper
+        [columnDefinitions]="transformedColumnDefs"
+        [rowData]="users"
+        [uniqueId]="'id'"
+        [selection-mode]="'multiRow'"
+        (rowClicked)="onRowClicked($event)"
+        (rowSelected)="onRowSelected($event)"
         (selectionChanged)="onSelectionChanged($event)"
         class="h-full w-full"
       >
-      </ag-grid-angular>
+      </app-data-grid-wrapper>
     </div>
   `
 })
 export class DataGridComponent implements OnInit {
-  @Input() title: string = 'Data Grid';
-  @Input() height: string = '500px';
-  @Input() columnDefs: ColDef[] = [];
-  @Input() endpoint: string = '';
-  @Input() showActions: boolean = false;
-  @Input() showExcelExport: boolean = false;
-  @Input() showPdfExport: boolean = false;
-  @Input() showPrint: boolean = false;
+  title = 'Users List';
+  height = '500px';
+  showActions = true;
+  showExcelExport = true;
+  showPdfExport = true;
+  showPrint = true;
+
+  columnDefs: ColDef[] = [
+    { 
+      headerName: 'Name',
+      field: 'name',
+      sortable: true,
+      width: 150
+    },
+    { 
+      headerName: 'Email',
+      field: 'email',
+      sortable: true,
+      width: 200
+    },
+    { 
+      headerName: 'Role',
+      field: 'role',
+      sortable: true,
+      width: 120
+    },
+    { 
+      headerName: 'Status',
+      field: 'status',
+      sortable: true,
+      width: 120,
+      cellClass: params => {
+        switch (params.value) {
+          case 'Active': return 'text-green-600';
+          case 'Inactive': return 'text-red-600';
+          case 'Pending': return 'text-yellow-600';
+          default: return '';
+        }
+      }
+    },
+    { 
+      headerName: 'Age',
+      field: 'age',
+      sortable: true,
+      width: 100
+    },
+    { 
+      headerName: 'Join Date',
+      field: 'joinDate',
+      sortable: true,
+      width: 150
+    },
+    { 
+      headerName: 'Salary',
+      field: 'salary',
+      sortable: true,
+      width: 120,
+      valueFormatter: params => {
+        return params.value ? `$${params.value.toLocaleString()}` : '';
+      }
+    }
+  ];
 
   private gridApi!: GridApi;
-  public loadedData: Map<number, any> = new Map(); // Store loaded rows by index
-  private totalRows: number = 0;
-  
-  public modules: Module[] = [InfiniteRowModelModule];
-  public rowModelType: RowModelType = 'infinite';
-  public dataSource!: IDatasource;
-  
-  // Configuration for infinite scrolling
-  public cacheBlockSize = 50;
-  public maxBlocksInCache = 10;
-  public infiniteInitialRowCount = 50;
-  public cacheOverflowSize = 1;
-  public rowSelection: 'single' | 'multiple' = 'multiple';
-  
-  public defaultColDef: ColDef = {
-    minWidth: 100,
-    resizable: true
-  };
+  users = [
+    {
+      "id": 1,
+      "name": "User 1",
+      "email": "user1@example.com",
+      "role": "User",
+      "status": "Inactive",
+      "age": 35,
+      "joinDate": "2024-11-17",
+      "salary": 72242
+    },
+    {
+      "id": 2,
+      "name": "User 2",
+      "email": "user2@example.com",
+      "role": "User",
+      "status": "Active",
+      "age": 22,
+      "joinDate": "2024-10-23",
+      "salary": 37081
+    },
+    {
+      "id": 3,
+      "name": "User 3",
+      "email": "user3@example.com",
+      "role": "Manager",
+      "status": "Inactive",
+      "age": 29,
+      "joinDate": "2024-04-17",
+      "salary": 55093
+    },
+    {
+      "id": 4,
+      "name": "User 4",
+      "email": "user4@example.com",
+      "role": "User",
+      "status": "Pending",
+      "age": 47,
+      "joinDate": "2025-02-25",
+      "salary": 77160
+    },
+    {
+      "id": 5,
+      "name": "User 5",
+      "email": "user5@example.com",
+      "role": "Analyst",
+      "status": "Inactive",
+      "age": 53,
+      "joinDate": "2024-06-24",
+      "salary": 68823
+    },
+    {
+      "id": 6,
+      "name": "User 6",
+      "email": "user6@example.com",
+      "role": "Admin",
+      "status": "Active",
+      "age": 52,
+      "joinDate": "2024-10-12",
+      "salary": 73626
+    },
+    {
+      "id": 7,
+      "name": "User 7",
+      "email": "user7@example.com",
+      "role": "Analyst",
+      "status": "Pending",
+      "age": 20,
+      "joinDate": "2024-11-26",
+      "salary": 73520
+    },
+    {
+      "id": 8,
+      "name": "User 8",
+      "email": "user8@example.com",
+      "role": "Analyst",
+      "status": "Active",
+      "age": 28,
+      "joinDate": "2024-09-11",
+      "salary": 75040
+    },
+    {
+      "id": 9,
+      "name": "User 9",
+      "email": "user9@example.com",
+      "role": "Admin",
+      "status": "Inactive",
+      "age": 31,
+      "joinDate": "2025-01-22",
+      "salary": 61151
+    },
+    {
+      "id": 10,
+      "name": "User 10",
+      "email": "user10@example.com",
+      "role": "Developer",
+      "status": "Pending",
+      "age": 28,
+      "joinDate": "2024-12-31",
+      "salary": 75629
+    }
+  ];
+  private selectedRows: any[] = [];
+  public transformedColumnDefs: DataGridColumnDefinitions<any>[] = [];
 
-  constructor(private dataService: DataService) {}
+  constructor() {}
 
   ngOnInit() {
-    if (!this.endpoint) {
-      console.error('Endpoint is required for virtual scrolling');
-      return;
-    }
+    this.transformColumnDefs();
+  }
 
-    // Add checkbox column at the start
-    this.columnDefs = [
-      {
-        headerName: '',
-        field: 'checkboxSelection',
-        headerCheckboxSelection: true,
-        checkboxSelection: true,
-        width: 40,
-        pinned: 'left'
-      },
-      ...this.columnDefs
-    ];
+  private transformColumnDefs() {
+    this.transformedColumnDefs = this.columnDefs.map(col => ({
+      headerName: col.headerName || col.field || '',
+      field: col.field || '',
+      isVisible: !col.hide,
+      width: col.width,
+      sortable: col.sortable ?? false,
+      editable: typeof col.editable === 'boolean' ? col.editable : false,
+      resizable: col.resizable ?? false,
+      cellClass: col.cellClass as string | string[],
+      columnIdentifier: col.colId
+    }));
   }
 
   onGridReady(params: GridReadyEvent) {
     this.gridApi = params.api;
-    this.setupDataSource();
   }
 
-  onModelUpdated(event: any) {
-    const totalLoaded = this.loadedData.size;
-    console.log(`Grid model updated. Total loaded rows: ${totalLoaded}, Total rows: ${this.totalRows}`);
+  onRowClicked(data: any) {
+    console.log('Row clicked:', data);
   }
 
-  private setupDataSource() {
-    if (!this.endpoint) {
-      console.error('Endpoint is required for virtual scrolling');
-      return;
-    }
-
-    this.dataSource = {
-      getRows: (params: IGetRowsParams) => {
-        const startRow = params.startRow;
-        const endRow = params.endRow;
-        
-        console.log(`Fetching rows ${startRow} to ${endRow}`);
-
-        this.dataService.getData(
-          this.endpoint,
-          startRow,
-          endRow
-        ).subscribe({
-          next: (response) => {
-            // Store the total count
-            this.totalRows = response.total;
-            
-            // Store each row in our Map
-            response.items.forEach((item: any, index: number) => {
-              this.loadedData.set(startRow + index, item);
-            });
-            
-            const rowsThisBlock = response.items.length;
-            const lastRow = response.total;
-            
-            console.log(`Loaded ${rowsThisBlock} rows. Total in cache: ${this.loadedData.size}/${lastRow}`);
-            
-            params.successCallback(response.items, lastRow);
-          },
-          error: (error) => {
-            console.error('Error fetching data:', error);
-            params.failCallback();
-          }
-        });
-      }
-    };
-
-    // Initial load
-    this.gridApi.setDatasource(this.dataSource);
+  onRowSelected(data: any) {
+    console.log('Row selected:', data);
   }
 
-  private getLoadedRowData(selectedOnly: boolean = false): any[] {
-    if (selectedOnly && this.gridApi) {
-      const selectedNodes = this.gridApi.getSelectedRows();
-      if (!selectedNodes || selectedNodes.length === 0) {
-        return [];
-      }
-      return selectedNodes;
-    }
-
-    // Convert Map to array, maintaining order
-    const rowData = Array.from(this.loadedData.entries())
-      .sort(([a], [b]) => a - b) // Sort by row index
-      .map(([_, data]) => data); // Get just the data
-
-    console.log('Loaded rows for export:', rowData.length);
-    return rowData;
+  onSelectionChanged(selectedData: any[]) {
+    this.selectedRows = selectedData;
+    console.log(selectedData)
   }
 
   getSelectedRowCount(): number {
-    if (!this.gridApi) {
-      return 0;
-    }
-    const selectedRows = this.gridApi.getSelectedRows();
-    return selectedRows ? selectedRows.length : 0;
+    return this.selectedRows.length;
   }
 
-  onSelectionChanged(event: any) {
-    const count = this.getSelectedRowCount();
-    console.log('Selection changed:', count, 'rows selected');
+  exportToExcel(selectedOnly: boolean) {
+    const data = selectedOnly ? this.selectedRows : this.users;
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Data');
+    XLSX.writeFile(wb, 'export.xlsx');
   }
 
-  async exportToExcel(selectedOnly: boolean = false) {
-    try {
-      const data = this.getLoadedRowData(selectedOnly);
-      if (data.length === 0) {
-        console.warn('No data to export');
-        return;
-      }
-      
-      console.log(`Exporting to Excel: ${data.length} ${selectedOnly ? 'selected' : 'loaded'} rows`);
-      
-      // Create worksheet
-      const ws: XLSX.WorkSheet = XLSX.utils.json_to_sheet(data);
-      
-      // Create workbook
-      const wb: XLSX.WorkBook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-      
-      // Generate Excel file
-      const prefix = selectedOnly ? 'Selected' : 'All';
-      const fileName = `${prefix}_${this.title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
-      XLSX.writeFile(wb, fileName);
-    } catch (error) {
-      console.error('Error exporting to Excel:', error);
-    }
+  exportToPdf(selectedOnly: boolean) {
+    const data = selectedOnly ? this.selectedRows : this.users;
+    const doc = new jsPDF();
+    
+    const columns = this.transformedColumnDefs.map(col => ({
+      header: col.headerName,
+      dataKey: col.field
+    }));
+
+    autoTable(doc, {
+      columns: columns,
+      body: data
+    });
+
+    doc.save('export.pdf');
   }
 
-  async exportToPdf(selectedOnly: boolean = false) {
-    try {
-      const data = this.getLoadedRowData(selectedOnly);
-      if (data.length === 0) {
-        console.warn('No data to export');
-        return;
-      }
-      
-      console.log(`Exporting to PDF: ${data.length} ${selectedOnly ? 'selected' : 'loaded'} rows`);
-      
-      // Create PDF document
-      const doc = new jsPDF();
-      
-      // Add title
-      const prefix = selectedOnly ? 'Selected' : 'All';
-      doc.text(`${this.title} - ${prefix} Rows`, 14, 15);
-      
-      // Prepare data for autoTable
-      const tableData = data.map(row => 
-        this.columnDefs.slice(1).map(col => col.field ? row[col.field] : '') // Skip checkbox column
-      );
-      
-      // Prepare headers for autoTable
-      const headers = this.columnDefs.slice(1).map(col => col.headerName || col.field || ''); // Skip checkbox column
-      
-      // Add table to PDF
-      autoTable(doc, {
-        head: [headers],
-        body: tableData,
-        startY: 20,
-        margin: { top: 15 },
-        styles: { fontSize: 8 },
-        headStyles: { fillColor: [41, 128, 185], textColor: 255 }
-      });
-      
-      // Save PDF
-      const fileName = `${prefix}_${this.title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-      doc.save(fileName);
-    } catch (error) {
-      console.error('Error exporting to PDF:', error);
-    }
+  printReport(selectedOnly: boolean) {
+    const data = selectedOnly ? this.selectedRows : this.users;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const html = this.generatePrintHtml(data);
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
   }
 
-  async printReport(selectedOnly: boolean = false) {
-    try {
-      const data = this.getLoadedRowData(selectedOnly);
-      if (data.length === 0) {
-        console.warn('No data to print');
-        return;
-      }
-      
-      console.log(`Printing: ${data.length} ${selectedOnly ? 'selected' : 'loaded'} rows`);
-      
-      const printContent = document.createElement('div');
-      printContent.classList.add('print-content');
+  private generatePrintHtml(data: any[]): string {
+    const headers = this.transformedColumnDefs.map(col => col.headerName);
+    const rows = data.map(item => 
+      this.transformedColumnDefs.map(col => item[col.field])
+    );
 
-      // Add title
-      const title = document.createElement('h2');
-      const prefix = selectedOnly ? 'Selected' : 'All';
-      title.textContent = `${this.title} - ${prefix} Rows`;
-      title.style.textAlign = 'center';
-      title.style.margin = '20px 0';
-      printContent.appendChild(title);
-
-      // Create table
-      const table = document.createElement('table');
-      table.style.width = '100%';
-      table.style.borderCollapse = 'collapse';
-
-      // Add headers
-      const thead = document.createElement('thead');
-      const headerRow = document.createElement('tr');
-      this.columnDefs.slice(1).forEach(col => { // Skip checkbox column
-        const th = document.createElement('th');
-        th.textContent = col.headerName || col.field || '';
-        th.style.border = '1px solid #ddd';
-        th.style.padding = '8px';
-        th.style.backgroundColor = '#f4f4f4';
-        headerRow.appendChild(th);
-      });
-      thead.appendChild(headerRow);
-      table.appendChild(thead);
-
-      // Add data rows
-      const tbody = document.createElement('tbody');
-      data.forEach(row => {
-        const tr = document.createElement('tr');
-        this.columnDefs.slice(1).forEach(col => { // Skip checkbox column
-          const td = document.createElement('td');
-          td.textContent = col.field && row[col.field] != null ? row[col.field].toString() : '';
-          td.style.border = '1px solid #ddd';
-          td.style.padding = '8px';
-          tr.appendChild(td);
-        });
-        tbody.appendChild(tr);
-      });
-      table.appendChild(tbody);
-      printContent.appendChild(table);
-
-      // Add date and row count info
-      const infoDiv = document.createElement('div');
-      infoDiv.style.marginTop = '20px';
-      infoDiv.style.textAlign = 'right';
-      infoDiv.innerHTML = `
-        Generated on: ${new Date().toLocaleDateString()}<br>
-        ${selectedOnly ? 'Selected' : 'Loaded'} rows: ${data.length} of ${this.totalRows} total rows
-      `;
-      printContent.appendChild(infoDiv);
-
-      // Create print window
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(`
-          <html>
-            <head>
-              <title>${this.title} - Print</title>
-              <style>
-                @media print {
-                  body { padding: 20px; }
-                  table { border-collapse: collapse; width: 100%; }
-                  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                  th { background-color: #f4f4f4; }
-                }
-              </style>
-            </head>
-            <body>
-              ${printContent.outerHTML}
-            </body>
-          </html>
-        `);
-        printWindow.document.close();
-        printWindow.focus();
-        setTimeout(() => {
-          printWindow.print();
-          printWindow.close();
-        }, 250);
-      }
-    } catch (error) {
-      console.error('Error printing report:', error);
-    }
+    return `
+      <html>
+        <head>
+          <title>Print Report</title>
+          <style>
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid black; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+          </style>
+        </head>
+        <body>
+          <h1>${this.title}</h1>
+          <table>
+            <thead>
+              <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
+            </thead>
+            <tbody>
+              ${rows.map(row => `
+                <tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
   }
 }
