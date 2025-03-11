@@ -11,7 +11,6 @@ import {
 } from 'ag-grid-community';
 import { DataGridUtility } from './utility/data-grid-utility';
 import { AgGridModule } from 'ag-grid-angular';
-import { signal } from '@angular/core';
 
 ModuleRegistry.registerModules([RowSelectionModule]);
 
@@ -32,7 +31,7 @@ describe('DataGridWrapperComponent', () => {
     } as unknown as jest.Mocked<GridApi>;
 
     TestBed.configureTestingModule({
-      imports: [AgGridModule, DataGridWrapperComponent],
+      imports: [DataGridWrapperComponent],
       providers: [DataGridUtility]
     });
 
@@ -76,6 +75,7 @@ describe('DataGridWrapperComponent', () => {
       };
 
       component.onRowSelected(event);  // Set up initial selection
+      jest.clearAllMocks(); // Clear spy history after initial setup
 
       const clickedMockNode = {
         data: { id: 123, test: 'test1' },
@@ -95,7 +95,11 @@ describe('DataGridWrapperComponent', () => {
       component.onRowClicked(clickEvent);
 
       // Assert
-      expect(component.getClickedRowId()).toBeNull();
+      expect(emitEventsSpy).not.toHaveBeenCalled();
+      expect(rowClickedSpy).not.toHaveBeenCalled();
+      expect(selectionChangedSpy).not.toHaveBeenCalled();
+      expect(mockGridApi.redrawRows).not.toHaveBeenCalled();
+      expect(component.getRowClass({ data: clickedMockNode.data })).toBe('ag-row-disabled');
     });
 
     it('should not emit events when clicked row is already active', () => {
@@ -123,6 +127,7 @@ describe('DataGridWrapperComponent', () => {
       expect(rowClickedSpy).toHaveBeenCalledWith(rowData);
       expect(selectionChangedSpy).toHaveBeenCalledWith([rowData]);
       expect(mockGridApi.redrawRows).toHaveBeenCalled();
+      expect(component.getRowClass({ data: rowData })).toBe('ag-row-clicked');
       
       // Clear spy history after initial setup
       jest.clearAllMocks();
@@ -135,9 +140,10 @@ describe('DataGridWrapperComponent', () => {
       expect(rowClickedSpy).not.toHaveBeenCalled();
       expect(selectionChangedSpy).not.toHaveBeenCalled();
       expect(mockGridApi.redrawRows).not.toHaveBeenCalled();
+      expect(component.getRowClass({ data: rowData })).toBe('ag-row-clicked');
     });
 
-    it('should emit events and update clicked row ID', () => {
+    it('should emit events and update clicked row state', () => {
       // Arrange
       const mockNode = {
         data: { id: 123, test: 'test1' },
@@ -160,12 +166,12 @@ describe('DataGridWrapperComponent', () => {
       expect(emitEventsSpy).toHaveBeenCalledWith(event);
       expect(selectionChangedSpy).toHaveBeenCalledWith([event.data]);
       expect(mockGridApi.redrawRows).toHaveBeenCalledTimes(1);
-      expect(component.getClickedRowId()).toBe('123');
+      expect(component.getRowClass({ data: mockNode.data })).toBe('ag-row-clicked');
     });
   });
 
   describe('onRowSelected', () => {
-    it('should add row ID to selected IDs when row is selected', () => {
+    it('should add row class when row is selected', () => {
       // Arrange
       const mockNode = {
         data: { id: 123, test: 'test1' },
@@ -186,13 +192,12 @@ describe('DataGridWrapperComponent', () => {
       component.onRowSelected(event);
 
       // Assert
-      expect(component.getSelectedRowIds().has('123')).toBe(true);
+      expect(component.getRowClass({ data: mockNode.data })).toBe('ag-row-selected');
       expect(mockGridApi.redrawRows).toHaveBeenCalledTimes(1);
     });
 
-    it('should remove row ID from selected IDs when row is deselected', () => {
+    it('should remove row class when row is deselected', () => {
       // Arrange
-      component.setSelectedRowIds(new Set(['123']));
       const mockNode = {
         data: { id: 123, test: 'test1' },
         isSelected: () => false
@@ -208,21 +213,22 @@ describe('DataGridWrapperComponent', () => {
         source: 'api'
       };
 
-      // Act
+      // First select the row
+      const selectedNode = { ...mockNode, isSelected: () => true };
+      component.onRowSelected({ ...event, node: selectedNode });
+
+      // Then deselect it
       component.onRowSelected(event);
 
       // Assert
-      expect(component.getSelectedRowIds().has('123')).toBe(false);
-      expect(mockGridApi.redrawRows).toHaveBeenCalledTimes(1);
+      expect(component.getRowClass({ data: mockNode.data })).toBe('');
+      expect(mockGridApi.redrawRows).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('onSelectionChanged', () => {
-    it('should not update when selected IDs are the same', () => {
+    it('should not update when selected nodes are the same', () => {
       // Arrange
-      const selectedIds = new Set(['123']);
-      component.setSelectedRowIds(selectedIds);
-      
       const mockNode = {
         data: { id: 123, test: 'test1' },
         isSelected: () => true
@@ -230,22 +236,27 @@ describe('DataGridWrapperComponent', () => {
 
       mockGridApi.getSelectedNodes.mockReturnValue([mockNode]);
 
+      // First selection
       const event: SelectionChangedEvent<TestData> = { 
         api: mockGridApi,
         type: 'selectionChanged',
         source: 'api',
         context: null
       };
+      component.onSelectionChanged(event);
 
-      // Act
+      // Clear spy history
+      jest.clearAllMocks();
+
+      // Act - Same selection again
       component.onSelectionChanged(event);
 
       // Assert
       expect(selectionChangedSpy).not.toHaveBeenCalled();
-      expect(component.getSelectedRowIds()).toEqual(selectedIds);
+      expect(component.getRowClass({ data: mockNode.data })).toBe('ag-row-selected');
     });
 
-    it('should update selected IDs and emit selection changed event', () => {
+    it('should update selected state and emit selection changed event', () => {
       // Arrange
       const mockNodes = [
         { data: { id: 123, test: 'test1' }, isSelected: () => true },
@@ -264,11 +275,9 @@ describe('DataGridWrapperComponent', () => {
       component.onSelectionChanged(event);
 
       // Assert
-      const selectedIds = component.getSelectedRowIds();
-      expect(selectedIds.has('123')).toBe(true);
-      expect(selectedIds.has('456')).toBe(true);
+      expect(component.getRowClass({ data: mockNodes[0].data })).toBe('ag-row-selected');
+      expect(component.getRowClass({ data: mockNodes[1].data })).toBe('ag-row-selected');
       expect(selectionChangedSpy).toHaveBeenCalledWith(mockNodes.map(node => node.data));
-      expect(component.getClickedRowId()).toBeNull();
     });
   });
 
