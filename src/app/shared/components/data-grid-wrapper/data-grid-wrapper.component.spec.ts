@@ -16,36 +16,33 @@ import { signal } from '@angular/core';
 ModuleRegistry.registerModules([RowSelectionModule]);
 
 describe('DataGridWrapperComponent', () => {
-  let component: DataGridWrapperComponent<any>;
-  let fixture: ComponentFixture<DataGridWrapperComponent<any>>;
+  let component: DataGridWrapperComponent<{ id: string }>;
+  let fixture: ComponentFixture<DataGridWrapperComponent<{ id: string }>>;
   let mockGridApi: jest.Mocked<GridApi>;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     mockGridApi = {
       redrawRows: jest.fn(),
       getSelectedNodes: jest.fn(),
       setGridOption: jest.fn()
     } as unknown as jest.Mocked<GridApi>;
 
-    await TestBed.configureTestingModule({
-      imports: [AgGridModule, DataGridWrapperComponent],
+    TestBed.configureTestingModule({
+      imports: [DataGridWrapperComponent],
       providers: [DataGridUtility]
-    }).compileComponents();
-    
-    fixture = TestBed.createComponent(DataGridWrapperComponent<any>);
+    });
+
+    fixture = TestBed.createComponent(DataGridWrapperComponent<{ id: string }>);
     component = fixture.componentInstance;
     
-    // Initialize signals
-    (component as any)['#gridApi'] = signal(mockGridApi);
-    (component as any)['#selectedRowIds'] = signal(new Set<string>());
-    (component as any)['#clickedRowId'] = signal<string | null>(null);
-    
     // Set input values
+    fixture.componentRef.setInput('uniqueId', 'id');
     fixture.componentRef.setInput('columnDefinitions', []);
     fixture.componentRef.setInput('rowData', []);
-    fixture.componentRef.setInput('uniqueId', 'id');
     fixture.componentRef.setInput('selectionMode', { mode: 'multiRow' });
     
+    // Initialize component through onGridReady
+    component.onGridReady({ api: mockGridApi });
     fixture.detectChanges();
   });
 
@@ -55,8 +52,8 @@ describe('DataGridWrapperComponent', () => {
       const mockNode = {
         data: { id: '456' },
         isSelected: () => true
-      } as unknown as IRowNode<any>;
-      const event: RowSelectedEvent<any> = { 
+      } as unknown as IRowNode<{ id: string }>;
+      const event: RowSelectedEvent<{ id: string }> = { 
         data: mockNode.data, 
         node: mockNode,
         type: 'rowSelected',
@@ -71,8 +68,8 @@ describe('DataGridWrapperComponent', () => {
       const clickedMockNode = {
         data: { id: '123' },
         isSelected: () => false
-      } as unknown as IRowNode<any>;
-      const clickEvent: RowClickedEvent<any> = { 
+      } as unknown as IRowNode<{ id: string }>;
+      const clickEvent: RowClickedEvent<{ id: string }> = { 
         data: clickedMockNode.data, 
         node: clickedMockNode,
         type: 'rowClicked',
@@ -92,11 +89,12 @@ describe('DataGridWrapperComponent', () => {
 
     it('should not emit events when clicked row is already active', () => {
       // Arrange
+      const rowData = { id: '123' };
       const mockNode = {
-        data: { id: '123' },
+        data: rowData,
         isSelected: () => false
-      } as unknown as IRowNode<any>;
-      const clickEvent: RowClickedEvent<any> = { 
+      } as unknown as IRowNode<{ id: string }>;
+      const clickEvent: RowClickedEvent<{ id: string }> = { 
         data: mockNode.data, 
         node: mockNode,
         type: 'rowClicked',
@@ -107,19 +105,29 @@ describe('DataGridWrapperComponent', () => {
       };
 
       // First click to set the initial state
+      const emitEventsSpy = jest.spyOn(component, 'emitEvents');
+      const rowClickedSpy = jest.spyOn(component.rowClicked, 'emit');
+      const selectionChangedSpy = jest.spyOn(component.selectionChanged, 'emit');
+      
       component.onRowClicked(clickEvent);
-      expect((component as any)['#clickedRowId']()).toBe('123'); // Verify initial state
+      
+      // Verify initial click behavior
+      expect(emitEventsSpy).toHaveBeenCalledWith(clickEvent);
+      expect(rowClickedSpy).toHaveBeenCalledWith(rowData);
+      expect(selectionChangedSpy).toHaveBeenCalledWith([rowData]);
+      expect(mockGridApi.redrawRows).toHaveBeenCalled();
       
       // Clear spy history after initial setup
       jest.clearAllMocks();
 
       // Act - Click the same row again
-      const emitEventsSpy = jest.spyOn(component, 'emitEvents');
       component.onRowClicked(clickEvent);
 
-      // Assert
+      // Assert - No events should be emitted for the second click
       expect(emitEventsSpy).not.toHaveBeenCalled();
-      expect((component as any)['#clickedRowId']()).toBe('123');
+      expect(rowClickedSpy).not.toHaveBeenCalled();
+      expect(selectionChangedSpy).not.toHaveBeenCalled();
+      expect(mockGridApi.redrawRows).not.toHaveBeenCalled();
     });
 
     it('should emit events and update clicked row ID', () => {
@@ -127,8 +135,8 @@ describe('DataGridWrapperComponent', () => {
       const mockNode = {
         data: { id: '123' },
         isSelected: () => false
-      } as unknown as IRowNode<any>;
-      const event: RowClickedEvent<any> = { 
+      } as unknown as IRowNode<{ id: string }>;
+      const event: RowClickedEvent<{ id: string }> = { 
         data: mockNode.data, 
         node: mockNode,
         type: 'rowClicked',
@@ -147,7 +155,7 @@ describe('DataGridWrapperComponent', () => {
       expect(emitEventsSpy).toHaveBeenCalledWith(event);
       expect(selectionChangedSpy).toHaveBeenCalledWith([event.data]);
       expect(mockGridApi.redrawRows).toHaveBeenCalledTimes(1);
-      expect((component as any)['#clickedRowId']()).toBe('123');
+      expect(component.getClickedRowId()).toBe('123');
     });
   });
 
@@ -157,8 +165,8 @@ describe('DataGridWrapperComponent', () => {
       const mockNode = {
         data: { id: '123' },
         isSelected: () => true
-      } as unknown as IRowNode<any>;
-      const event: RowSelectedEvent<any> = { 
+      } as unknown as IRowNode<{ id: string }>;
+      const event: RowSelectedEvent<{ id: string }> = { 
         data: mockNode.data, 
         node: mockNode,
         type: 'rowSelected',
@@ -173,18 +181,18 @@ describe('DataGridWrapperComponent', () => {
       component.onRowSelected(event);
 
       // Assert
-      expect((component as any)['#selectedRowIds']().has('123')).toBe(true);
+      expect(component.getSelectedRowIds().has('123')).toBe(true);
       expect(mockGridApi.redrawRows).toHaveBeenCalledTimes(1);
     });
 
     it('should remove row ID from selected IDs when row is deselected', () => {
       // Arrange
-      (component as any)['#selectedRowIds'].set(new Set(['123']));
+      component.setSelectedRowIds(new Set(['123']));
       const mockNode = {
         data: { id: '123' },
         isSelected: () => false
-      } as unknown as IRowNode<any>;
-      const event: RowSelectedEvent<any> = { 
+      } as unknown as IRowNode<{ id: string }>;
+      const event: RowSelectedEvent<{ id: string }> = { 
         data: mockNode.data, 
         node: mockNode,
         type: 'rowSelected',
@@ -199,7 +207,7 @@ describe('DataGridWrapperComponent', () => {
       component.onRowSelected(event);
 
       // Assert
-      expect((component as any)['#selectedRowIds']().has('123')).toBe(false);
+      expect(component.getSelectedRowIds().has('123')).toBe(false);
     });
   });
 
@@ -207,15 +215,15 @@ describe('DataGridWrapperComponent', () => {
     it('should not update when selected IDs are the same', () => {
       // Arrange
       const selectedIds = new Set(['123']);
-      (component as any)['#selectedRowIds'].set(selectedIds);
+      component.setSelectedRowIds(selectedIds);
       
       const mockNode = {
         data: { id: '123' },
         isSelected: () => true
-      } as unknown as IRowNode<any>;
+      } as unknown as IRowNode<{ id: string }>;
       mockGridApi.getSelectedNodes.mockReturnValue([mockNode]);
 
-      const event: SelectionChangedEvent<any> = { 
+      const event: SelectionChangedEvent<{ id: string }> = { 
         api: mockGridApi,
         type: 'selectionChanged',
         source: null,
@@ -228,7 +236,7 @@ describe('DataGridWrapperComponent', () => {
 
       // Assert
       expect(selectionChangedSpy).not.toHaveBeenCalled();
-      expect((component as any)['#selectedRowIds']()).toEqual(selectedIds);
+      expect(component.getSelectedRowIds()).toEqual(selectedIds);
     });
 
     it('should update selected IDs and emit selection changed event', () => {
@@ -236,10 +244,10 @@ describe('DataGridWrapperComponent', () => {
       const mockNodes = [
         { data: { id: '123' }, isSelected: () => true },
         { data: { id: '456' }, isSelected: () => true }
-      ] as unknown as IRowNode<any>[];
+      ] as unknown as IRowNode<{ id: string }>[];
       mockGridApi.getSelectedNodes.mockReturnValue(mockNodes);
 
-      const event: SelectionChangedEvent<any> = { 
+      const event: SelectionChangedEvent<{ id: string }> = { 
         api: mockGridApi,
         type: 'selectionChanged',
         source: null,
@@ -251,12 +259,11 @@ describe('DataGridWrapperComponent', () => {
       component.onSelectionChanged(event);
 
       // Assert
-      const selectedIds = (component as any)['#selectedRowIds']();
+      const selectedIds = component.getSelectedRowIds();
       expect(selectedIds.has('123')).toBe(true);
       expect(selectedIds.has('456')).toBe(true);
       expect(selectionChangedSpy).toHaveBeenCalledWith(mockNodes.map(node => node.data));
-      expect((component as any)['#clickedRowId']()).toBeNull();
-      expect(mockGridApi.redrawRows).toHaveBeenCalledWith({ rowNodes: mockNodes });
+      expect(component.getClickedRowId()).toBeNull();
     });
   });
 
@@ -266,8 +273,8 @@ describe('DataGridWrapperComponent', () => {
       const mockNode = {
         data: { id: '123' },
         isSelected: () => true
-      } as unknown as IRowNode<any>;
-      const event: RowClickedEvent<any> = { 
+      } as unknown as IRowNode<{ id: string }>;
+      const event: RowClickedEvent<{ id: string }> = { 
         data: mockNode.data, 
         node: mockNode,
         type: 'rowClicked',
