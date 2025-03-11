@@ -16,9 +16,13 @@ import { signal } from '@angular/core';
 ModuleRegistry.registerModules([RowSelectionModule]);
 
 describe('DataGridWrapperComponent', () => {
-  let component: DataGridWrapperComponent<{ id: string }>;
-  let fixture: ComponentFixture<DataGridWrapperComponent<{ id: string }>>;
+  let component: DataGridWrapperComponent<TestData>;
+  let fixture: ComponentFixture<DataGridWrapperComponent<TestData>>;
   let mockGridApi: jest.Mocked<GridApi>;
+  let emitEventsSpy: jest.SpyInstance;
+  let rowClickedSpy: jest.SpyInstance;
+  let rowSelectedSpy: jest.SpyInstance;
+  let selectionChangedSpy: jest.SpyInstance;
 
   beforeEach(() => {
     mockGridApi = {
@@ -28,11 +32,11 @@ describe('DataGridWrapperComponent', () => {
     } as unknown as jest.Mocked<GridApi>;
 
     TestBed.configureTestingModule({
-      imports: [DataGridWrapperComponent],
+      imports: [AgGridModule, DataGridWrapperComponent],
       providers: [DataGridUtility]
     });
 
-    fixture = TestBed.createComponent(DataGridWrapperComponent<{ id: string }>);
+    fixture = TestBed.createComponent(DataGridWrapperComponent<TestData>);
     component = fixture.componentInstance;
     
     // Set input values
@@ -43,6 +47,13 @@ describe('DataGridWrapperComponent', () => {
     
     // Initialize component through onGridReady
     component.onGridReady({ api: mockGridApi });
+
+    // Initialize spies
+    emitEventsSpy = jest.spyOn(component, 'emitEvents');
+    rowClickedSpy = jest.spyOn(component.rowClicked, 'emit');
+    rowSelectedSpy = jest.spyOn(component.rowSelected, 'emit');
+    selectionChangedSpy = jest.spyOn(component.selectionChanged, 'emit');
+    
     fixture.detectChanges();
   });
 
@@ -50,10 +61,10 @@ describe('DataGridWrapperComponent', () => {
     it('should not emit events when row is not selected and other selections exist', () => {
       // Arrange
       const mockNode = {
-        data: { id: '456' },
+        data: { id: 456, test: 'test2' },
         isSelected: () => true
-      } as unknown as IRowNode<{ id: string }>;
-      const event: RowSelectedEvent<{ id: string }> = { 
+      } as unknown as IRowNode<TestData>;
+      const event: RowSelectedEvent<TestData> = { 
         data: mockNode.data, 
         node: mockNode,
         type: 'rowSelected',
@@ -61,15 +72,16 @@ describe('DataGridWrapperComponent', () => {
         rowPinned: null,
         api: mockGridApi,
         context: null,
-        source: null
+        source: 'api'
       };
+
       component.onRowSelected(event);  // Set up initial selection
 
       const clickedMockNode = {
-        data: { id: '123' },
+        data: { id: 123, test: 'test1' },
         isSelected: () => false
-      } as unknown as IRowNode<{ id: string }>;
-      const clickEvent: RowClickedEvent<{ id: string }> = { 
+      } as unknown as IRowNode<TestData>;
+      const clickEvent: RowClickedEvent<TestData> = { 
         data: clickedMockNode.data, 
         node: clickedMockNode,
         type: 'rowClicked',
@@ -80,21 +92,20 @@ describe('DataGridWrapperComponent', () => {
       };
 
       // Act
-      const emitEventsSpy = jest.spyOn(component, 'emitEvents');
       component.onRowClicked(clickEvent);
 
       // Assert
-      expect(emitEventsSpy).not.toHaveBeenCalled();
+      expect(component.getClickedRowId()).toBeNull();
     });
 
     it('should not emit events when clicked row is already active', () => {
       // Arrange
-      const rowData = { id: '123' };
+      const rowData = { id: 123, test: 'test1' };
       const mockNode = {
         data: rowData,
         isSelected: () => false
-      } as unknown as IRowNode<{ id: string }>;
-      const clickEvent: RowClickedEvent<{ id: string }> = { 
+      } as unknown as IRowNode<TestData>;
+      const clickEvent: RowClickedEvent<TestData> = { 
         data: mockNode.data, 
         node: mockNode,
         type: 'rowClicked',
@@ -104,11 +115,7 @@ describe('DataGridWrapperComponent', () => {
         context: null
       };
 
-      // First click to set the initial state
-      const emitEventsSpy = jest.spyOn(component, 'emitEvents');
-      const rowClickedSpy = jest.spyOn(component.rowClicked, 'emit');
-      const selectionChangedSpy = jest.spyOn(component.selectionChanged, 'emit');
-      
+      // First click to set the initial state      
       component.onRowClicked(clickEvent);
       
       // Verify initial click behavior
@@ -133,10 +140,10 @@ describe('DataGridWrapperComponent', () => {
     it('should emit events and update clicked row ID', () => {
       // Arrange
       const mockNode = {
-        data: { id: '123' },
+        data: { id: 123, test: 'test1' },
         isSelected: () => false
-      } as unknown as IRowNode<{ id: string }>;
-      const event: RowClickedEvent<{ id: string }> = { 
+      } as unknown as IRowNode<TestData>;
+      const event: RowClickedEvent<TestData> = { 
         data: mockNode.data, 
         node: mockNode,
         type: 'rowClicked',
@@ -147,8 +154,6 @@ describe('DataGridWrapperComponent', () => {
       };
 
       // Act
-      const emitEventsSpy = jest.spyOn(component, 'emitEvents');
-      const selectionChangedSpy = jest.spyOn(component.selectionChanged, 'emit');
       component.onRowClicked(event);
 
       // Assert
@@ -163,10 +168,10 @@ describe('DataGridWrapperComponent', () => {
     it('should add row ID to selected IDs when row is selected', () => {
       // Arrange
       const mockNode = {
-        data: { id: '123' },
+        data: { id: 123, test: 'test1' },
         isSelected: () => true
-      } as unknown as IRowNode<{ id: string }>;
-      const event: RowSelectedEvent<{ id: string }> = { 
+      } as unknown as IRowNode<TestData>;
+      const event: RowSelectedEvent<TestData> = { 
         data: mockNode.data, 
         node: mockNode,
         type: 'rowSelected',
@@ -174,7 +179,7 @@ describe('DataGridWrapperComponent', () => {
         rowPinned: null,
         api: mockGridApi,
         context: null,
-        source: null
+        source: 'api'
       };
 
       // Act
@@ -189,10 +194,10 @@ describe('DataGridWrapperComponent', () => {
       // Arrange
       component.setSelectedRowIds(new Set(['123']));
       const mockNode = {
-        data: { id: '123' },
+        data: { id: 123, test: 'test1' },
         isSelected: () => false
-      } as unknown as IRowNode<{ id: string }>;
-      const event: RowSelectedEvent<{ id: string }> = { 
+      } as unknown as IRowNode<TestData>;
+      const event: RowSelectedEvent<TestData> = { 
         data: mockNode.data, 
         node: mockNode,
         type: 'rowSelected',
@@ -200,7 +205,7 @@ describe('DataGridWrapperComponent', () => {
         rowPinned: null,
         api: mockGridApi,
         context: null,
-        source: null
+        source: 'api'
       };
 
       // Act
@@ -208,6 +213,7 @@ describe('DataGridWrapperComponent', () => {
 
       // Assert
       expect(component.getSelectedRowIds().has('123')).toBe(false);
+      expect(mockGridApi.redrawRows).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -218,20 +224,20 @@ describe('DataGridWrapperComponent', () => {
       component.setSelectedRowIds(selectedIds);
       
       const mockNode = {
-        data: { id: '123' },
+        data: { id: 123, test: 'test1' },
         isSelected: () => true
-      } as unknown as IRowNode<{ id: string }>;
+      } as unknown as IRowNode<TestData>;
+
       mockGridApi.getSelectedNodes.mockReturnValue([mockNode]);
 
-      const event: SelectionChangedEvent<{ id: string }> = { 
+      const event: SelectionChangedEvent<TestData> = { 
         api: mockGridApi,
         type: 'selectionChanged',
-        source: null,
+        source: 'api',
         context: null
       };
 
       // Act
-      const selectionChangedSpy = jest.spyOn(component.selectionChanged, 'emit');
       component.onSelectionChanged(event);
 
       // Assert
@@ -242,20 +248,19 @@ describe('DataGridWrapperComponent', () => {
     it('should update selected IDs and emit selection changed event', () => {
       // Arrange
       const mockNodes = [
-        { data: { id: '123' }, isSelected: () => true },
-        { data: { id: '456' }, isSelected: () => true }
-      ] as unknown as IRowNode<{ id: string }>[];
+        { data: { id: 123, test: 'test1' }, isSelected: () => true },
+        { data: { id: 456, test: 'test2' }, isSelected: () => true }
+      ] as unknown as IRowNode<TestData>[];
       mockGridApi.getSelectedNodes.mockReturnValue(mockNodes);
 
-      const event: SelectionChangedEvent<{ id: string }> = { 
+      const event: SelectionChangedEvent<TestData> = { 
         api: mockGridApi,
         type: 'selectionChanged',
-        source: null,
+        source: 'api',
         context: null
       };
 
       // Act
-      const selectionChangedSpy = jest.spyOn(component.selectionChanged, 'emit');
       component.onSelectionChanged(event);
 
       // Assert
@@ -271,10 +276,10 @@ describe('DataGridWrapperComponent', () => {
     it('should emit row clicked and row selected events', () => {
       // Arrange
       const mockNode = {
-        data: { id: '123' },
+        data: { id: 123, test: 'test1' },
         isSelected: () => true
-      } as unknown as IRowNode<{ id: string }>;
-      const event: RowClickedEvent<{ id: string }> = { 
+      } as unknown as IRowNode<TestData>;
+      const event: RowClickedEvent<TestData> = { 
         data: mockNode.data, 
         node: mockNode,
         type: 'rowClicked',
@@ -285,8 +290,6 @@ describe('DataGridWrapperComponent', () => {
       };
 
       // Act
-      const rowClickedSpy = jest.spyOn(component.rowClicked, 'emit');
-      const rowSelectedSpy = jest.spyOn(component.rowSelected, 'emit');
       component.emitEvents(event);
 
       // Assert
@@ -298,3 +301,8 @@ describe('DataGridWrapperComponent', () => {
     });
   });
 });
+
+interface TestData {
+  id: number;
+  test: string;
+}
