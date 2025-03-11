@@ -52,14 +52,29 @@ describe('DataGridWrapperComponent', () => {
   describe('onRowClicked', () => {
     it('should not emit events when row is not selected and other selections exist', () => {
       // Arrange
-      (component as any)['#selectedRowIds'].set(new Set(['456']));
       const mockNode = {
+        data: { id: '456' },
+        isSelected: () => true
+      } as unknown as IRowNode<any>;
+      const event: RowSelectedEvent<any> = { 
+        data: mockNode.data, 
+        node: mockNode,
+        type: 'rowSelected',
+        rowIndex: 0,
+        rowPinned: null,
+        api: mockGridApi,
+        context: null,
+        source: null
+      };
+      component.onRowSelected(event);  // Set up initial selection
+
+      const clickedMockNode = {
         data: { id: '123' },
         isSelected: () => false
       } as unknown as IRowNode<any>;
-      const event: RowClickedEvent<any> = { 
-        data: mockNode.data, 
-        node: mockNode,
+      const clickEvent: RowClickedEvent<any> = { 
+        data: clickedMockNode.data, 
+        node: clickedMockNode,
         type: 'rowClicked',
         rowIndex: 0,
         rowPinned: null,
@@ -69,7 +84,7 @@ describe('DataGridWrapperComponent', () => {
 
       // Act
       const emitEventsSpy = jest.spyOn(component, 'emitEvents');
-      component.onRowClicked(event);
+      component.onRowClicked(clickEvent);
 
       // Assert
       expect(emitEventsSpy).not.toHaveBeenCalled();
@@ -77,12 +92,11 @@ describe('DataGridWrapperComponent', () => {
 
     it('should not emit events when clicked row is already active', () => {
       // Arrange
-      (component as any)['#clickedRowId'].set('123');
       const mockNode = {
         data: { id: '123' },
         isSelected: () => false
       } as unknown as IRowNode<any>;
-      const event: RowClickedEvent<any> = { 
+      const clickEvent: RowClickedEvent<any> = { 
         data: mockNode.data, 
         node: mockNode,
         type: 'rowClicked',
@@ -92,12 +106,20 @@ describe('DataGridWrapperComponent', () => {
         context: null
       };
 
-      // Act
+      // First click to set the initial state
+      component.onRowClicked(clickEvent);
+      expect((component as any)['#clickedRowId']()).toBe('123'); // Verify initial state
+      
+      // Clear spy history after initial setup
+      jest.clearAllMocks();
+
+      // Act - Click the same row again
       const emitEventsSpy = jest.spyOn(component, 'emitEvents');
-      component.onRowClicked(event);
+      component.onRowClicked(clickEvent);
 
       // Assert
       expect(emitEventsSpy).not.toHaveBeenCalled();
+      expect((component as any)['#clickedRowId']()).toBe('123');
     });
 
     it('should emit events and update clicked row ID', () => {
