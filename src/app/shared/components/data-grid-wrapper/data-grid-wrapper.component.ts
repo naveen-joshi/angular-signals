@@ -23,6 +23,10 @@ import {
   RowSelectedEvent,
   RowClickedEvent,
   SelectionChangedEvent,
+  ValidationModule,
+  RenderApiModule,
+  RowStyleModule,
+  RowSelectionOptions,
 } from 'ag-grid-community';
 import { combineLatestWith, map, filter } from 'rxjs';
 import { toObservable } from '@angular/core/rxjs-interop';
@@ -32,9 +36,14 @@ ModuleRegistry.registerModules([
   CellStyleModule,
   ColumnApiModule,
   ClientSideRowModelModule,
+  RenderApiModule,
+  RowStyleModule
 ]);
 
-export type SelectionMode = 'none' | 'single' | 'multiRow';
+enum RowSelectionMode {
+  Single = 'singleRow',
+  Multiple = 'multiRow'
+}
 
 @Component({
   selector: 'app-data-grid-wrapper',
@@ -47,12 +56,12 @@ export type SelectionMode = 'none' | 'single' | 'multiRow';
       [theme]="theme" 
       [getRowId]="cmpObj.getRowId" 
       [defaultColDef]="defaultColDef"
-      [rowSelection]="selectionMode() === 'single' ? 'single' : 'multiple'"
-      [suppressRowClickSelection]="selectionMode() === 'multiRow'"
+      [rowSelection]="selectionMode"
       [getRowClass]="getRowClass"
       (gridReady)="onGridReady($event)"
       (rowClicked)="onRowClicked($event)"
       (rowSelected)="onRowSelected($event)"
+      [modules]="modules"
       (selectionChanged)="onSelectionChanged($event)"
     ></ag-grid-angular>
   `,
@@ -62,14 +71,18 @@ export type SelectionMode = 'none' | 'single' | 'multiRow';
   styleUrls: ['./data-grid-wrapper.component.scss']
 })
 export class DataGridWrapperComponent<TData> {
+  modules = [ClientSideRowModelModule, ValidationModule];
   columnDefinitions = input.required<Array<DataGridColumnDefinitions<TData>>>();
   rowData = input.required<Array<TData>>();
   uniqueId = input<string>();
-  selectionMode = input<SelectionMode>('multiRow', { alias: 'selection-mode' });
+  rowSelection = input<RowSelectionMode>(RowSelectionMode.Multiple);
+  get selectionMode() {
+    return {mode: this.rowSelection()}
+  }
 
   // Output events
-  rowClicked = output<TData>();
-  rowSelected = output<TData>();
+  rowClicked = output<any>();
+  rowSelected = output<any>();
   selectionChanged = output<TData[]>();
 
   datagridUtility = inject(DataGridUtility<TData>);
@@ -89,27 +102,13 @@ export class DataGridWrapperComponent<TData> {
   };
 
   readonly transformColDefs$ = toObservable(this.#gridApi).pipe(
-    combineLatestWith(toObservable(this.columnDefinitions), toObservable(this.selectionMode)),
+    combineLatestWith(toObservable(this.columnDefinitions), toObservable(this.rowSelection)),
     filter(
       ([api, columnDefinitions, mode]) =>
         columnDefinitions !== undefined && api !== undefined
     ),
     map(([api, columnDefinitions, mode]) => {
       const columns: ColDef[] = this.datagridUtility.transformColumnDefinitions(columnDefinitions);
-      
-      if (mode === 'multiRow') {
-        const checkboxCol: ColDef = {
-          headerName: '',
-          field: 'checkboxSelection',
-          width: 50,
-          pinned: 'left',
-          checkboxSelection: true,
-          headerCheckboxSelection: true,
-          headerCheckboxSelectionFilteredOnly: true,
-          cellClass: 'checkbox-cell'
-        };
-        columns.unshift(checkboxCol);
-      }
       
       return {
         api: api,
@@ -124,68 +123,58 @@ export class DataGridWrapperComponent<TData> {
   }
 
   getRowClass = (params: any) => {
-    const classes: string[] = [];
     const rowId = params.data[this.uniqueId()].toString();
     const selectedIds = this.#selectedRowIds();
-    
-    // Clicked row styling - only show if no selections
-    if (rowId === this.#clickedRowId() && selectedIds.size === 0) {
-      classes.push('clicked-row');
-    }
-    
-    // Selected row styling
-    if (params.node.isSelected()) {
-      classes.push('selected-row');
-      this.#selectedRowIds.update(ids => {
-        const newIds = new Set(ids);
-        newIds.add(rowId);
-        return newIds;
-      });
-    }
-    
-    // Disabled row styling for all rows when there are selections
+
     if (selectedIds.size > 0 && !selectedIds.has(rowId)) {
-      classes.push('disabled-row');
+      return 'ag-row-disabled';
     }
     
-    return classes.join(' ');
+    if (rowId === this.#clickedRowId() && selectedIds.size === 0) {
+      return 'ag-row-clicked';
+    }
+    
+    if (selectedIds.has(rowId)) {
+      return 'ag-row-selected';
+    }
+    
+    return '';
   };
 
   onRowClicked(event: RowClickedEvent<TData>) {
     const rowId = event.data[this.uniqueId()].toString();
     const selectedIds = this.#selectedRowIds();
     
-    // Only allow clicking and update clicked row if no selections
-    if (selectedIds.size === 0) {
-      this.#clickedRowId.set(rowId);
-      this.rowClicked.emit(event.data);
-      
-      // Force refresh row styles
-      this.#gridApi()?.refreshCells({
-        force: true,
-        rowNodes: [event.node],
-        columns: ['checkboxSelection']
-      });
+    if(selectedIds.size !== 0 && !selectedIds.has(rowId)) {
+      return;
     }
+
+    if(this.#clickedRowId() === rowId) {
+      return;
+    }
+
+    this.#clickedRowId.set(rowId);
+    this.emitEvents(event);
+    this.selectionChanged.emit([event.data]);
+    this.#gridApi()?.redrawRows();
   }
 
   onRowSelected(event: RowSelectedEvent<TData>) {
     const rowId = event.data[this.uniqueId()].toString();
     
-    if (event.node.isSelected()) {
-      this.rowSelected.emit(event.data);
-      this.#selectedRowIds.update(ids => {
-        const newIds = new Set(ids);
+    this.#selectedRowIds.update((ids) => {
+      const newIds = new Set(ids);
+      if (event.node.isSelected()) {
+        this.emitEvents(event);
         newIds.add(rowId);
-        return newIds;
-      });
-    } else {
-      this.#selectedRowIds.update(ids => {
-        const newIds = new Set(ids);
+      } else {
+        this.emitEvents(event);
         newIds.delete(rowId);
-        return newIds;
-      });
-    }
+      }
+      return newIds;
+    });
+
+    this.#gridApi()?.redrawRows();
   }
 
   onSelectionChanged(event: SelectionChangedEvent<TData>) {
@@ -196,27 +185,38 @@ export class DataGridWrapperComponent<TData> {
     const newSelectedIds = new Set(
       selectedNodes.map(node => node.data[this.uniqueId()].toString())
     );
+
+    const currentSelectedIds = this.#selectedRowIds();
+    if(currentSelectedIds.size === newSelectedIds.size && 
+       Array.from(currentSelectedIds).every(id => newSelectedIds.has(id))) {
+      return;
+    }
+
     this.#selectedRowIds.set(newSelectedIds);
-    
+    this.#clickedRowId.set(null);
+
+    // Emit events for each selected node
+    selectedNodes.forEach(node => {
+      this.emitEvents({ 
+        type: 'rowSelected',
+        node,
+        data: node.data,
+        api: event.api,
+        context: event.context,
+        rowIndex: 0,
+        rowPinned: null,
+        source: event.source
+      });
+    });
+
     this.selectionChanged.emit(selectedData);
   }
 
-  // Public methods for external control
-  selectAll() {
-    this.#gridApi()?.selectAll();
-  }
-
-  deselectAll() {
-    this.#gridApi()?.deselectAll();
-    this.#selectedRowIds.set(new Set());
-  }
-
-  toggleSelection() {
-    const selectedNodes = this.#gridApi()?.getSelectedNodes() || [];
-    if (selectedNodes.length > 0) {
-      this.deselectAll();
-    } else {
-      this.selectAll();
-    }
+  emitEvents(event: RowClickedEvent<TData> | RowSelectedEvent<TData>) {
+    this.rowClicked.emit(event.data);
+    this.rowSelected.emit({
+      isSelected: event.node.isSelected(),
+      data: event.data
+    });
   }
 }

@@ -84,12 +84,12 @@
 
 :host ::ng-deep {
   .clicked-row {
-    background-color: rgba(0, 123, 255, 0.1) !important;
+    background-color: red !important;
     cursor: pointer;
   }
 
   .selected-row {
-    background-color: rgba(0, 123, 255, 0.2) !important;
+    background-color: #b7e4ff !important;
   }
 
   .disabled-row {
