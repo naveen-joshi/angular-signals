@@ -2,37 +2,25 @@ import { signalStore, withState, withMethods, withComputed } from '@ngrx/signals
 import { patchState } from '@ngrx/signals';
 import { computed } from '@angular/core';
 import { Tab } from './tabs.model';
-import { EntityState, createEntityAdapter } from '@ngrx/entity';
+import { withEntities } from '@ngrx/signals/entities';
 
 // Define the state interface
-export interface TabState extends EntityState<Tab> {
+export interface TabState {
     selectedTabId: string | null;
 }
 
-// Create entity adapter
-const tabAdapter = createEntityAdapter<Tab>({
-    selectId: (tab: Tab) => tab.screenId,
-    sortComparer: false
-});
-
 // Initial state
-const initialState: TabState = tabAdapter.getInitialState({
+const initialState: TabState = {
     selectedTabId: null
-});
+};
 
 // Create the signal store
 export const TabsStore = signalStore(
     { providedIn: 'root' },
-    withState(initialState),
+    withEntities<Tab>(),
+    withState<TabState>(initialState),
     withMethods((store) => ({
         addTab(pageNumber: number) {
-            const updates = store.ids().map(id => ({
-                id: id as string,
-                changes: {
-                    active: false
-                }
-            }));
-
             const newTab: Tab = {
                 screenId: 'Search ' + pageNumber,
                 label: 'Search ' + pageNumber,
@@ -40,88 +28,140 @@ export const TabsStore = signalStore(
                 active: true
             };
 
-            const updatedState = tabAdapter.updateMany(updates, {
-                ids: store.ids(),
-                entities: store.entities(),
-                selectedTabId: store.selectedTabId()
-            });
+            // Update all existing tabs to inactive
+            const currentEntities = store.entities();
+            const updatedEntities = currentEntities.map((entity: Tab) => ({
+                ...entity,
+                active: false
+            }));
             
-            const finalState = tabAdapter.addOne(newTab, updatedState);
-            patchState(store, finalState);
+            patchState(store, (state) => ({
+                ...state,
+                entityMap: {
+                    ...state.entityMap,
+                    ...updatedEntities.reduce((acc, entity) => ({
+                        ...acc,
+                        [entity.screenId]: entity
+                    }), {})
+                }
+            }));
+            
+            // Add the new tab
+            patchState(store, (state) => ({
+                ...state,
+                entityMap: {
+                    ...state.entityMap,
+                    [newTab.screenId]: newTab
+                },
+                ids: [...state.ids, newTab.screenId]
+            }));
         },
 
         deleteTab(screenId: string) {
-            const currentIds = store.ids();
-            const deletedTabIndex = (currentIds as string[]).indexOf(screenId);
-            const wasActive = store.entities()[screenId]?.active;
+            const entities = store.entities();
+            const deletedTabIndex = entities.findIndex((tab: Tab) => tab.screenId === screenId);
+            const wasActive = entities[deletedTabIndex]?.active;
             
-            const currentState = {
-                ids: currentIds,
-                entities: store.entities(),
-                selectedTabId: store.selectedTabId()
-            };
-            
-            const newState = tabAdapter.removeOne(screenId, currentState);
-
-            let updates: { id: string, changes: { active: boolean } }[] = [];
+            // Remove the tab
+            patchState(store, (state) => ({
+                ...state,
+                entityMap: Object.fromEntries(
+                    Object.entries(state.entityMap).filter(([key]) => key !== screenId)
+                ),
+                ids: state.ids.filter(id => id !== screenId)
+            }));
 
             if (wasActive) {
-                updates = newState.ids.map((id, index) => ({
-                    id: id as string,
-                    changes: {
-                        active: deletedTabIndex === 0 ? index === 0 : index === deletedTabIndex - 1
+                // Update the active state of remaining tabs
+                const remainingEntities = store.entities();
+                const newActivatedIndex = deletedTabIndex === 0 ? 0 : deletedTabIndex - 1;
+                
+                const updatedEntities = remainingEntities.map((entity: Tab, index: number) => ({
+                    ...entity,
+                    active: index === newActivatedIndex
+                }));
+
+                patchState(store, (state) => ({
+                    ...state,
+                    entityMap: {
+                        ...state.entityMap,
+                        ...updatedEntities.reduce((acc, entity) => ({
+                            ...acc,
+                            [entity.screenId]: entity
+                        }), {})
                     }
                 }));
             }
+        },
 
-            const finalState = tabAdapter.updateMany(updates, newState);
-            patchState(store, finalState);
+        deleteAll() {
+            const entities = store.entities();
+            if (entities.length === 0) return;
+
+            // Find the first tab to keep active
+            const firstTab = entities[0];
+            
+            patchState(store, (state) => ({
+                ...state,
+                entityMap: {
+                    [firstTab.screenId]: { ...firstTab, active: true }
+                },
+                ids: [firstTab.screenId],
+                selectedTabId: firstTab.screenId
+            }));
+        },
+
+        renameTab(screenId: string, newLabel: string) {
+            const entity = store.entities().find((tab: Tab) => tab.screenId === screenId);
+            if (!entity) return;
+
+            patchState(store, (state) => ({
+                ...state,
+                entityMap: {
+                    ...state.entityMap,
+                    [screenId]: {
+                        ...entity,
+                        label: newLabel
+                    }
+                }
+            }));
         },
 
         selectTab(screenId: string) {
-            const updates = store.ids().map((id) => ({
-                id: id as string,
-                changes: { active: id === screenId }
+            const entities = store.entities();
+            const updatedEntities = entities.map((entity: Tab) => ({
+                ...entity,
+                active: entity.screenId === screenId
             }));
 
-            const currentState = {
-                ids: store.ids(),
-                entities: store.entities(),
-                selectedTabId: store.selectedTabId()
-            };
-
-            const finalState = tabAdapter.updateMany(updates, {
-                ...currentState,
+            patchState(store, (state) => ({
+                ...state,
+                entityMap: {
+                    ...state.entityMap,
+                    ...updatedEntities.reduce((acc, entity) => ({
+                        ...acc,
+                        [entity.screenId]: entity
+                    }), {})
+                },
                 selectedTabId: screenId
-            });
-
-            patchState(store, finalState);
+            }));
         },
 
         resetState() {
-            patchState(store, initialState);
+            patchState(store, (state) => ({
+                ...state,
+                entityMap: {},
+                ids: [],
+                selectedTabId: null
+            }));
         }
     })),
-    withComputed((store) => {
-        const adapterSelectors = tabAdapter.getSelectors();
-        
-        const currentState = computed(() => ({
-            ids: store.ids(),
-            entities: store.entities(),
-            selectedTabId: store.selectedTabId()
-        }));
-        
-        return {
-            ids: computed(() => adapterSelectors.selectIds(currentState())),
-            entities: computed(() => adapterSelectors.selectEntities(currentState())),
-            allTabs: computed(() => adapterSelectors.selectAll(currentState())),
-            total: computed(() => adapterSelectors.selectTotal(currentState())),
-            selectedTabId: computed(() => store.selectedTabId()),
-            selectedTab: computed(() => {
-                const entities = store.entities();
-                const selectedId = store.selectedTabId();
-                return selectedId ? entities[selectedId] : null;
-            }),
-        };
-    })
+    withComputed((store) => ({
+        allTabs: computed(() => store.entities()),
+        total: computed(() => store.ids().length),
+        selectedTabId: computed(() => store.selectedTabId()),
+        selectedTab: computed(() => 
+            store.entities().find((tab: Tab) => tab.screenId === store.selectedTabId())
+        )
+    }))
 );
